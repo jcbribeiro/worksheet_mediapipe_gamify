@@ -11,7 +11,7 @@
 
 ## Update the resources and configuration
 
-### Copy the provided images to res/drawable
+### Copy the provided images (image_pack.zip) to res/drawable
 
 ### Enable data binding on build.gradle (project level)
 
@@ -22,7 +22,7 @@ buildFeatures {
 }
 ```
 
-## Update the Main Activity and create the Navigation Drawer
+## Create the Navigation Drawer and make the necessary adaptations to the layouts/UI
 
 ### Create res/menu/navdrawer_menu.xml
 
@@ -60,6 +60,42 @@ buildFeatures {
         app:layout_constraintTop_toTopOf="parent"
         app:srcCompat="@drawable/image3" />
 </androidx.constraintlayout.widget.ConstraintLayout>
+```
+
+## Create RulesFragment: layout/fragment_rules.xml
+
+```xml
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <ImageView
+            android:id="@+id/rulesImage"
+            android:layout_width="0dp"
+            android:layout_height="240dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/image1" />
+
+        <TextView
+            android:id="@+id/rulesText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:padding="16dp"
+            android:text="The goal of this game is simple: find 5 elements -- any elements -- in under to win! Just make sure you do it in under 30 seconds...! Good luck!"
+            android:textAppearance="@style/TextAppearance.AppCompat.Large"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/rulesImage" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
 ```
 
 ### Update nav_graph.xml
@@ -123,43 +159,6 @@ buildFeatures {
     </androidx.drawerlayout.widget.DrawerLayout>
 </layout>
 ```
-
-## Create RulesFragment: layout/fragment_rules.xml
-
-```xml
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
-
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <ImageView
-            android:id="@+id/rulesImage"
-            android:layout_width="0dp"
-            android:layout_height="240dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/image1" />
-
-        <TextView
-            android:id="@+id/rulesText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:padding="16dp"
-            android:text="The goal of this game is simple: find 5 elements -- any elements -- in under to win! Just make sure you do it in under 30 seconds...! Good luck!"
-            android:textAppearance="@style/TextAppearance.AppCompat.Large"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/rulesImage" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-</ScrollView>
-```
-
 
 ## Update MainActivity.kt
 
@@ -322,63 +321,75 @@ class CameraFragment : Fragment(), ImageClassifierHelper.ClassifierListener {
   }
 
   private fun gameLogic() {
-    val totalTime = 30000L
-    var elapsedTime = 0L
-    var playing = false;
+        // Total time of the timer in milliseconds (30 seconds)
+        val totalTime = 30000L
+        var elapsedTime = 0L
+        var playing = false;
 
-    val countDownTimer = object : CountDownTimer(30000, 1000) {
-      override fun onTick(millisUntilFinished: Long) {
-        val progress = ((totalTime - millisUntilFinished) / (totalTime / 100)).toInt()
-        fragmentCameraBinding.progressBar.progress = progress
-        elapsedTime = totalTime - millisUntilFinished
-      }
+        val countDownTimer = object : CountDownTimer(30000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val progress = ((totalTime - millisUntilFinished) / (totalTime / 100)).toInt()
+                fragmentCameraBinding.progressBar.progress = progress
+                elapsedTime = totalTime - millisUntilFinished
+            }
 
-      override fun onFinish() {
-        Navigation.findNavController(
-          requireActivity(), R.id.fragment_container
-        ).navigate(CameraFragmentDirections.actionCameraFragmentToGameOverFragment())
-      }
+            override fun onFinish() {
+                // game lost
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Game Over")
+                    .setMessage("You have lost the game...")
+                    .setPositiveButton("OK") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+        }
+
+        // game start
+        AlertDialog.Builder(requireContext())
+            .setTitle("Press the start button to start the game.")
+            .setMessage("Find 5 objects in 30 seconds. Any objects!")
+            .setPositiveButton("OK") { dialog, _ ->
+                dialog.dismiss()
+                playing = true
+                countDownTimer.start()
+            }
+            .setCancelable(false)
+            .show()
+
+        viewModel.labelLiveData.observe(this, Observer {
+            Snackbar.make(fragmentCameraBinding.root, it.last(), Snackbar.LENGTH_LONG).show()
+
+            if (playing)
+                fragmentCameraBinding.label.text = it.size.toString() + ": " + it.toString()
+
+            if (it.size == 5 && playing) {
+                countDownTimer.cancel()
+                playing = false
+
+                // game won
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Game Won")
+                    .setMessage("Congratulations! You have found all 5 objects in " + elapsedTime/1000 + " seconds.")
+                    .setPositiveButton("OK") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .setCancelable(false)
+                    .show()
+            }
+        })
     }
 
-    viewModel.labelLiveData.observe(this, Observer {
-      Snackbar.make(fragmentCameraBinding.root, it.last(), Snackbar.LENGTH_LONG).show()
+    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+        super.onCreateOptionsMenu(menu, inflater)
+        inflater.inflate(R.menu.navdrawer_menu,menu)
+    }
 
-      if (playing)
-        fragmentCameraBinding.label.text = it.size.toString() + ": " + it.toString()
-
-      if (it.size >= 5 && playing) {
-        countDownTimer.cancel()
-        playing = false
-
-        // navigate to game won fragment
-        Navigation.findNavController(
-          requireActivity(), R.id.fragment_container
-        ).navigate(CameraFragmentDirections.actionCameraFragmentToGameWonFragment())
-      }
-    })
-
-    AlertDialog.Builder(this@CameraFragment.activity)
-      .setTitle("Play the Game!")
-      .setMessage("Press the Start button to start the game.")
-      .setPositiveButton("Start") { dialog, _ ->
-        dialog.dismiss()
-        playing = true
-        countDownTimer.start()
-      }
-      .setCancelable(false)
-      .show()
-  }
-}
-
-override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-    super.onCreateOptionsMenu(menu, inflater)
-    inflater.inflate(R.menu.nav_drawer,menu)
-}
-
-override fun onOptionsItemSelected(item: MenuItem): Boolean {
-    return NavigationUI.onNavDestinationSelected(item, requireView().findNavController())
-        || super.onOptionsItemSelected(item)
-}
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return NavigationUI.onNavDestinationSelected(item, requireView().findNavController())
+            || super.onOptionsItemSelected(item)
+    }
 ```
 
 Also, replace the former with the latter everywhere in your file:
